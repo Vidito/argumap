@@ -617,7 +617,6 @@ document.getElementById("check-button").addEventListener("click", () => {
 });
 
 function showComparison() {
-feedback.innerHTML = `&lt;strong&gt;Expert reconstruction&lt;/strong&gt;&lt;p&gt;The standpoint is &lt;b&gt;1&lt;/b&gt;. It is supported by two independent elementary arguments: &lt;b&gt;1.1 &amp; (1.1′) → 1&lt;/b&gt; and &lt;b&gt;1.2 &amp; (1.2′) → 1&lt;/b&gt;. In each argument, the expressed and unexpressed premises function together. The unexpressed premise is not a sub-argument and should not repeat the standpoint.&lt;/p&gt;&lt;button class="compare-button" id="hide-comparison"&gt;Hide comparison&lt;/button&gt;`;  document.getElementById("hide-comparison").addEventListener("click", () => document.getElementById("check-button").click());
 }
 
 window.addEventListener("resize", drawConnections);
