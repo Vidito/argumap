@@ -617,8 +617,7 @@ document.getElementById("check-button").addEventListener("click", () => {
 });
 
 function showComparison() {
-  feedback.innerHTML = `<strong>Expert reconstruction</strong><p>The standpoint is <b>1</b>. The two independent defenses are separate elementary arguments: <b>1.1 & (1.1′) → 1</b> and <b>1.2 → 1</b>. An unexpressed premise is grouped with the expressed premise it completes; it is not a sub-argument and has no separate dashed arrow. A different wording can be defensible when it preserves the arguer’s contextual commitment without merely repeating the standpoint.</p><button class="compare-button" id="hide-comparison">Hide comparison</button>`;
-  document.getElementById("hide-comparison").addEventListener("click", () => document.getElementById("check-button").click());
+feedback.innerHTML = `&lt;strong&gt;Expert reconstruction&lt;/strong&gt;&lt;p&gt;The standpoint is &lt;b&gt;1&lt;/b&gt;. It is supported by two independent elementary arguments: &lt;b&gt;1.1 &amp; (1.1′) → 1&lt;/b&gt; and &lt;b&gt;1.2 &amp; (1.2′) → 1&lt;/b&gt;. In each argument, the expressed and unexpressed premises function together. The unexpressed premise is not a sub-argument and should not repeat the standpoint.&lt;/p&gt;&lt;button class="compare-button" id="hide-comparison"&gt;Hide comparison&lt;/button&gt;`;  document.getElementById("hide-comparison").addEventListener("click", () => document.getElementById("check-button").click());
 }
 
 window.addEventListener("resize", drawConnections);
