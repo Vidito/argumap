@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analytic Overview Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Pragma-dialectical practice</p>
+          <h1>Vahid Niamadpour</h1>
+          <h1>Analytic Overview Lab</h1>
+        </div>
+        <div class="top-actions">
+          <button class="button button-quiet" id="reset-button">Reset</button>
+          <button class="button button-primary" id="check-button">
+            Check my analysis
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <section class="source-panel" aria-labelledby="source-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">01 / Discourse</p>
+              <h2 id="source-heading">Read the short text</h2>
+            </div>
+            <span class="selection-hint">Select a sentence to classify it</span>
+          </div>
+          <article class="source-card" id="source-text">
+            <p>
+              The university should keep the library open until midnight during
+              exam weeks. Many students need a quiet place to study after the
+              evening classes end. Extending the hours would also make better
+              use of the library’s existing staff and facilities.
+            </p>
+          </article>
+
+          <div class="concept-note">
+            <span class="note-mark">i</span>
+            <p>
+              <strong>Analytic overview.</strong> Reconstruct the standpoints
+              and arguments as they function in the discourse. Your arrows
+              always point toward the statement being defended.
+            </p>
+          </div>
+        </section>
+
+        <section class="canvas-panel" aria-labelledby="canvas-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">02 / Reconstruction</p>
+              <h2 id="canvas-heading">Build the structure</h2>
+            </div>
+            <span class="canvas-legend"
+              ><span class="legend-line"></span> supports</span
+            >
+          </div>
+          <div class="canvas-wrap">
+            <div
+              class="canvas"
+              id="canvas"
+              aria-label="Argument mapping canvas"
+            >
+              <svg class="connections" id="connections" aria-hidden="true">
+                <defs>
+                  <marker
+                    id="arrowhead"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="7"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L8,4 L0,8 Z" fill="currentColor"></path>
+                  </marker>
+                </defs>
+              </svg>
+              <div class="empty-state" id="empty-state">
+                <span class="empty-icon">+</span>
+                <p>
+                  Select the standpoint or an argument<br />from the discourse
+                  to begin.
+                </p>
+              </div>
+              <div id="nodes"></div>
+              <div class="connection-popover" id="connection-popover" hidden>
+                <p>What kind of support is this?</p>
+                <button data-relationship="multiple">
+                  Multiple: independent support
+                </button>
+                <button data-relationship="coordinative">
+                  Coordinative: interdependent support
+                </button>
+                <button data-relationship="sub">
+                  Subordinative: support for an argument
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="canvas-footer">
+            <button class="premise-button" id="premise-button">
+              + Add Unexpressed Premise
+            </button>
+            <span class="drag-help"
+              >Select an expressed premise before adding its unexpressed
+              premise.</span
+            >
+          </div>
+        </section>
+      </div>
+
+      <section
+        class="feedback"
+        id="feedback"
+        hidden
+        aria-live="polite"
+      ></section>
+    </main>
+
+    <div class="selection-menu" id="selection-menu" hidden>
+      <button id="standpoint-action">Set as Standpoint</button>
+      <button id="argument-action">Add as Argument</button>
+    </div>
+
+    <div class="dialog-backdrop" id="premise-dialog" hidden>
+      <form class="helper-dialog" id="premise-form">
+        <div class="dialog-topline">
+          <span class="section-kicker">Reconstruct an unexpressed premise</span>
+          <button
+            type="button"
+            class="close-button"
+            id="close-dialog"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="step" data-step="1">
+          <p class="step-count">Step 1 of 2</p>
+          <h2>Logical minimum</h2>
+          <p class="dialog-copy">
+            State the conditional connection between your explicit argument and
+            the standpoint.
+          </p>
+          <label for="logical-minimum">If [argument], then [standpoint].</label>
+          <textarea
+            id="logical-minimum"
+            required
+            placeholder="If students need a quiet place to study, then ..."
+          ></textarea>
+          <button type="button" class="button button-primary next-step">
+            Continue
+          </button>
+        </div>
+        <div class="step" data-step="2" hidden>
+          <p class="step-count">Step 2 of 2</p>
+          <h2>Pragmatic optimum</h2>
+          <p class="dialog-copy">
+            Revise this into a contextually appropriate formulation of the
+            arguer’s unexpressed premise.
+          </p>
+          <label for="pragmatic-optimum"
+            >More informative, without adding unnecessary information</label
+          >
+          <textarea
+            id="pragmatic-optimum"
+            required
+            placeholder="The library should serve students who need a quiet place after evening classes."
+          ></textarea>
+          <div class="dialog-actions">
+            <button type="button" class="button button-quiet previous-step">
+              Back
+            </button>
+            <button type="submit" class="button button-primary">
+              Add reconstruction
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
