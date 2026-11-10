@@ -1,4 +1,58 @@
-const sourceText = document.getElementById('source-text');
+// State & History Management
+const PRESETS = {
+  'preset-1': {
+    title: 'Preset: Library hours',
+    text: 'The university should keep the library open until midnight during exam weeks. Many students need a quiet place to study after the evening classes end. Extending the hours would also make better use of the library’s existing staff and facilities.',
+  },
+  'preset-2': {
+    title: 'Preset: Electric vehicles',
+    text: 'Cities ought to subsidize residential electric vehicle charging stations. Access to home charging significantly accelerates clean vehicle adoption. Moreover, widespread private charging reduces strain on public fast-charging corridors.',
+  },
+  'preset-3': {
+    title: 'Preset: Remote work',
+    text: 'Companies should permanently maintain flexible remote-work policies. Offering remote options broadens the talent pool across regional boundaries. Flexible scheduling also measurably reduces commute-related carbon emissions.',
+  },
+};
+
+const SCHEME_DETAILS = {
+  Causal: {
+    title: 'Causal Argument Scheme',
+    description: 'Argues that because event or action X leads to consequence Y, action X is desirable (or vice versa).',
+    questions: [
+      'Does the stated action really lead to the proposed effect?',
+      'Are there plausible negative side-effects that outweigh the advantage?',
+      'Could the desired result be achieved more effectively through other means?',
+    ],
+  },
+  Analogy: {
+    title: 'Analogy Argument Scheme',
+    description: 'Argues that because case A resembles case B in relevant respects, what holds true for B also holds true for A.',
+    questions: [
+      'Are cases A and B truly comparable in crucial, relevant respects?',
+      'Are there significant differences between the cases that invalidate the comparison?',
+      'Is there another comparable case that points to a contrary conclusion?',
+    ],
+  },
+  Example: {
+    title: 'Example / Sign Scheme',
+    description: 'Argues that one or more representative instances justify a general rule or symptomatic claim.',
+    questions: [
+      'Is the given example representative of the broader class or situation?',
+      'Are there counter-examples showing that this instance is atypical?',
+      'Is the sample size sufficient to warrant the generalization?',
+    ],
+  },
+};
+
+// Elements
+const sourceTextEl = document.getElementById('source-text');
+const sourceEditWrap = document.getElementById('source-edit-wrap');
+const sourceEditInput = document.getElementById('source-edit-input');
+const editTextBtn = document.getElementById('edit-text-btn');
+const cancelEditBtn = document.getElementById('cancel-edit-btn');
+const saveEditBtn = document.getElementById('save-edit-btn');
+const presetSelect = document.getElementById('preset-select');
+
 const selectionMenu = document.getElementById('selection-menu');
 const canvas = document.getElementById('canvas');
 const nodesLayer = document.getElementById('nodes');
@@ -9,12 +63,32 @@ const feedback = document.getElementById('feedback');
 const premiseDialog = document.getElementById('premise-dialog');
 const premiseForm = document.getElementById('premise-form');
 const premiseButton = document.getElementById('premise-button');
+const addStatementBtn = document.getElementById('add-statement-btn');
 
+const undoBtn = document.getElementById('undo-btn');
+const redoBtn = document.getElementById('redo-btn');
+const tidyBtn = document.getElementById('tidy-btn');
+const exportBtn = document.getElementById('export-btn');
+const exportMenu = document.getElementById('export-menu');
+const exportPngBtn = document.getElementById('export-png-btn');
+const exportJsonBtn = document.getElementById('export-json-btn');
+const importJsonBtn = document.getElementById('import-json-btn');
+const importFileInput = document.getElementById('import-file-input');
+const copySummaryBtn = document.getElementById('copy-summary-btn');
+
+const schemeInfoPopover = document.getElementById('scheme-info-popover');
+const schemeInfoTitle = document.getElementById('scheme-info-title');
+const schemeInfoDesc = document.getElementById('scheme-info-desc');
+const schemeInfoList = document.getElementById('scheme-info-list');
+const closeSchemeInfo = document.getElementById('close-scheme-info');
+
+// App State
 let nodes = [];
 let edges = [];
 let groups = [];
 let selectedText = '';
 let selectedNodeId = null;
+let editingNodeId = null;
 let pendingSourceId = null;
 let pendingTargetId = null;
 let pendingSourceSide = null;
@@ -23,6 +97,114 @@ let selectedEdgeIndex = null;
 let selectedGroupId = null;
 let dragState = null;
 
+// History Stack for Undo/Redo
+let historyStack = [];
+let historyIndex = -1;
+let isApplyingHistory = false;
+
+function saveHistoryState() {
+  if (isApplyingHistory) return;
+  const snapshot = {
+    nodes: JSON.parse(JSON.stringify(nodes)),
+    edges: JSON.parse(JSON.stringify(edges)),
+    groups: JSON.parse(JSON.stringify(groups)),
+    selectedNodeId,
+  };
+  // Trim redo branch
+  historyStack = historyStack.slice(0, historyIndex + 1);
+  historyStack.push(snapshot);
+  if (historyStack.length > 50) historyStack.shift();
+  historyIndex = historyStack.length - 1;
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  undoBtn.disabled = historyIndex <= 0;
+  redoBtn.disabled = historyIndex >= historyStack.length - 1;
+}
+
+function undo() {
+  if (historyIndex > 0) {
+    historyIndex--;
+    applyHistoryState(historyStack[historyIndex]);
+  }
+}
+
+function redo() {
+  if (historyIndex < historyStack.length - 1) {
+    historyIndex++;
+    applyHistoryState(historyStack[historyIndex]);
+  }
+}
+
+function applyHistoryState(state) {
+  isApplyingHistory = true;
+  nodes = JSON.parse(JSON.stringify(state.nodes));
+  edges = JSON.parse(JSON.stringify(state.edges));
+  groups = JSON.parse(JSON.stringify(state.groups));
+  selectedNodeId = state.selectedNodeId;
+  editingNodeId = null;
+  selectedEdgeIndex = null;
+  selectedGroupId = null;
+  isApplyingHistory = false;
+  updateHistoryButtons();
+  render();
+}
+
+// Toast notification
+function showToast(message) {
+  let toast = document.querySelector('.toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+// Discourse custom / preset handling
+function initDiscourse() {
+  presetSelect.addEventListener('change', () => {
+    const val = presetSelect.value;
+    if (PRESETS[val]) {
+      sourceTextEl.textContent = PRESETS[val].text;
+      sourceTextEl.hidden = false;
+      sourceEditWrap.hidden = true;
+    } else if (val === 'custom') {
+      openDiscourseEditor();
+    }
+  });
+
+  editTextBtn.addEventListener('click', () => {
+    openDiscourseEditor();
+  });
+
+  cancelEditBtn.addEventListener('click', () => {
+    sourceTextEl.hidden = false;
+    sourceEditWrap.hidden = true;
+  });
+
+  saveEditBtn.addEventListener('click', () => {
+    const newText = sourceEditInput.value.trim();
+    if (newText) {
+      sourceTextEl.textContent = newText;
+      presetSelect.value = 'custom';
+    }
+    sourceTextEl.hidden = false;
+    sourceEditWrap.hidden = true;
+  });
+}
+
+function openDiscourseEditor() {
+  sourceEditInput.value = sourceTextEl.textContent.trim();
+  sourceTextEl.hidden = true;
+  sourceEditWrap.hidden = false;
+  sourceEditInput.focus();
+}
+
+// Rendering
 function render() {
   nodesLayer.innerHTML = '';
   nodes.forEach((node) => {
@@ -37,6 +219,13 @@ function render() {
     element.dataset.nodeId = node.id;
     element.style.left = `${node.x}px`;
     element.style.top = `${node.y}px`;
+
+    const isEditing = editingNodeId === node.id;
+
+    const schemeInfoBtn = node.scheme
+      ? `<button class="scheme-info-trigger" data-scheme="${escapeHtml(node.scheme)}" title="View critical questions" aria-label="Critical questions for ${escapeHtml(node.scheme)}">?</button>`
+      : '';
+
     const schemeControl =
       selectedNodeId === node.id
         ? `<select class="scheme-select" aria-label="Argument scheme for ${escapeHtml(node.number)}">
@@ -44,16 +233,21 @@ function render() {
             <option value="Causal" ${node.scheme === 'Causal' ? 'selected' : ''}>Causal</option>
             <option value="Analogy" ${node.scheme === 'Analogy' ? 'selected' : ''}>Analogy</option>
             <option value="Example" ${node.scheme === 'Example' ? 'selected' : ''}>Example</option>
-          </select>`
+          </select>${schemeInfoBtn}`
         : node.scheme
-          ? `<span class="scheme-pill">${escapeHtml(node.scheme)}</span>`
+          ? `<span class="scheme-pill">${escapeHtml(node.scheme)}</span>${schemeInfoBtn}`
           : '';
+
+    const bodyContent = isEditing
+      ? `<textarea class="node-edit-textarea" aria-label="Edit node text">${escapeHtml(node.text)}</textarea>`
+      : `<p class="node-text">${escapeHtml(node.text)}</p>`;
+
     element.innerHTML = `
-      <button class="delete-node" type="button" aria-label="Delete ${node.number}">×</button>
+      <button class="delete-node" type="button" aria-label="Delete ${escapeHtml(node.number)}">×</button>
       <span class="node-number">${escapeHtml(node.number)}</span>
       <div class="node-body">
         <span class="node-type">${label}</span>
-        <p class="node-text">${escapeHtml(node.text)}</p>
+        ${bodyContent}
       </div>
       <div class="scheme-control">${schemeControl}</div>
       <span class="node-port port-top" data-side="top" title="Connect from the top"></span>
@@ -61,15 +255,55 @@ function render() {
       <span class="node-port port-bottom" data-side="bottom" title="Connect from the bottom"></span>
       <span class="node-port port-left" data-side="left" title="Connect from the left"></span>
     `;
+
+    // Event listeners on node
     element.addEventListener('pointerdown', startNodeDrag);
     element.addEventListener('click', () => selectNode(node.id));
+
+    // Double-click inline text editing
+    element.addEventListener('dblclick', (event) => {
+      if (
+        event.target.classList.contains('delete-node') ||
+        event.target.classList.contains('node-port') ||
+        event.target.classList.contains('scheme-select') ||
+        event.target.classList.contains('scheme-info-trigger')
+      )
+        return;
+      startInlineEdit(node.id);
+    });
+
+    if (isEditing) {
+      const textarea = element.querySelector('.node-edit-textarea');
+      if (textarea) {
+        setTimeout(() => {
+          textarea.focus();
+          textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+        }, 0);
+        textarea.addEventListener('pointerdown', (e) => e.stopPropagation());
+        textarea.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            commitInlineEdit(node.id, textarea.value);
+          } else if (e.key === 'Escape') {
+            editingNodeId = null;
+            render();
+          }
+        });
+        textarea.addEventListener('blur', () => {
+          commitInlineEdit(node.id, textarea.value);
+        });
+      }
+    }
+
     element
       .querySelectorAll('.node-port')
       .forEach((port) => port.addEventListener('pointerdown', startConnection));
+
     element.querySelector('.delete-node').addEventListener('click', (event) => {
       event.stopPropagation();
       deleteNode(node.id);
     });
+
     element.querySelector('.scheme-select')?.addEventListener('pointerdown', (event) => {
       event.stopPropagation();
     });
@@ -78,17 +312,43 @@ function render() {
     });
     element.querySelector('.scheme-select')?.addEventListener('change', (event) => {
       node.scheme = event.target.value;
+      saveHistoryState();
       render();
     });
+
+    element.querySelectorAll('.scheme-info-trigger').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openSchemeInfo(btn.dataset.scheme, btn);
+      });
+    });
+
     nodesLayer.appendChild(element);
   });
+
   emptyState.hidden = nodes.length > 0;
   premiseButton.disabled = !getSelectedExpressedNode();
   drawConnections();
 }
 
+function startInlineEdit(nodeId) {
+  editingNodeId = nodeId;
+  render();
+}
+
+function commitInlineEdit(nodeId, newText) {
+  const node = getNode(nodeId);
+  editingNodeId = null;
+  if (node && newText.trim() && newText.trim() !== node.text) {
+    node.text = newText.trim();
+    saveHistoryState();
+  }
+  render();
+}
+
 function escapeHtml(value) {
-  return value.replace(
+  if (!value) return '';
+  return String(value).replace(
     /[&<>"']/g,
     (char) =>
       ({
@@ -113,6 +373,7 @@ function getSelectedExpressedNode() {
 }
 
 function selectNode(id) {
+  if (selectedNodeId === id) return;
   selectedNodeId = id;
   render();
 }
@@ -121,15 +382,21 @@ function startNodeDrag(event) {
   if (
     event.target.classList.contains('node-port') ||
     event.target.classList.contains('delete-node') ||
-    event.target.classList.contains('scheme-select')
+    event.target.classList.contains('scheme-select') ||
+    event.target.classList.contains('scheme-info-trigger') ||
+    event.target.classList.contains('node-edit-textarea')
   )
     return;
   const node = getNode(event.currentTarget.dataset.nodeId);
+  if (!node) return;
   const bounds = canvas.getBoundingClientRect();
   dragState = {
     node,
+    startX: node.x,
+    startY: node.y,
     offsetX: event.clientX - bounds.left - node.x,
     offsetY: event.clientY - bounds.top - node.y,
+    moved: false,
   };
   selectedNodeId = node.id;
   event.currentTarget.setPointerCapture(event.pointerId);
@@ -141,6 +408,7 @@ function startNodeDrag(event) {
 
 function moveNode(event) {
   if (!dragState) return;
+  dragState.moved = true;
   const bounds = canvas.getBoundingClientRect();
   dragState.node.x = Math.max(
     8,
@@ -159,14 +427,27 @@ function moveNode(event) {
   const element = nodesLayer.querySelector(
     `[data-node-id="${dragState.node.id}"]`,
   );
-  element.style.left = `${dragState.node.x}px`;
-  element.style.top = `${dragState.node.y}px`;
+  if (element) {
+    element.style.left = `${dragState.node.x}px`;
+    element.style.top = `${dragState.node.y}px`;
+  }
   drawConnections();
 }
 
 function stopNodeDrag(event) {
   event.currentTarget.removeEventListener('pointermove', moveNode);
+  if (
+    dragState &&
+    (dragState.node.x !== dragState.startX ||
+      dragState.node.y !== dragState.startY)
+  ) {
+    saveHistoryState();
+  }
+  const wasMoved = dragState && dragState.moved;
   dragState = null;
+  if (!wasMoved) {
+    render();
+  }
 }
 
 function startConnection(event) {
@@ -177,6 +458,7 @@ function startConnection(event) {
   pendingTargetId = null;
   pendingTargetSide = null;
   const bounds = canvas.getBoundingClientRect();
+
   const move = (moveEvent) => {
     const hovered = document
       .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
@@ -194,6 +476,7 @@ function startConnection(event) {
       hovered.classList.add('drop-target');
     }
   };
+
   const finish = (upEvent) => {
     document.removeEventListener('pointermove', move);
     document.removeEventListener('pointerup', finish);
@@ -231,8 +514,8 @@ function clearPendingConnection() {
 }
 
 function showConnectionPopover(x, y) {
-  connectionPopover.style.left = `${x}px`;
-  connectionPopover.style.top = `${y}px`;
+  connectionPopover.style.left = `${Math.min(canvas.clientWidth - 200, Math.max(10, x))}px`;
+  connectionPopover.style.top = `${Math.min(canvas.clientHeight - 130, Math.max(10, y))}px`;
   connectionPopover.hidden = false;
 }
 
@@ -271,6 +554,7 @@ function addConnection(relationship) {
   }
   clearPendingConnection();
   connectionPopover.hidden = true;
+  saveHistoryState();
   render();
 }
 
@@ -295,6 +579,7 @@ function addToCoordinativeGroup(source, target) {
   );
   group.memberIds.forEach((memberId, index) => {
     const member = getNode(memberId);
+    if (!member) return;
     member.type = 'coordinative';
     member.number = `${target.number}.1${String.fromCharCode(97 + index)}`;
     if (memberId === source.id) {
@@ -311,6 +596,8 @@ function addUnexpressedPremise() {
   premiseForm.dataset.expressedId = expressed.id;
   premiseForm.querySelector('[data-step="1"]').hidden = false;
   premiseForm.querySelector('[data-step="2"]').hidden = true;
+  document.getElementById('logical-minimum').value = '';
+  document.getElementById('pragmatic-optimum').value = '';
   document.getElementById('logical-minimum').focus();
 }
 
@@ -325,7 +612,7 @@ function submitPremise() {
     type: 'unexpressed',
     text: optimum,
     scheme: '',
-    x: expressed.x + 215,
+    x: Math.min(canvas.clientWidth - 205, expressed.x + 215),
     y: expressed.y,
   };
   nodes.push(premise);
@@ -360,41 +647,43 @@ function submitPremise() {
     layoutElementaryGroup(group);
   }
 
-  function layoutElementaryGroup(group) {
-    const expressed = getNode(
-      group.memberIds.find((id) => getNode(id)?.type !== 'unexpressed'),
+  function layoutElementaryGroup(g) {
+    const expr = getNode(
+      g.memberIds.find((id) => getNode(id)?.type !== 'unexpressed'),
     );
-    const premise = getNode(
-      group.memberIds.find((id) => getNode(id)?.type === 'unexpressed'),
+    const prem = getNode(
+      g.memberIds.find((id) => getNode(id)?.type === 'unexpressed'),
     );
-    if (!expressed || !premise) return;
-    premise.x = Math.min(canvas.clientWidth - 205, expressed.x + 215);
-    premise.y = expressed.y;
+    if (!expr || !prem) return;
+    prem.x = Math.min(canvas.clientWidth - 205, expr.x + 215);
+    prem.y = expr.y;
   }
 
-  function layoutCoordinativeGroup(group) {
-    const target = getNode(group.target);
+  function layoutCoordinativeGroup(g) {
+    const target = getNode(g.target);
     if (!target) return;
     const spacing = 215;
     const startX = Math.max(
       15,
-      target.x + 95 - ((group.memberIds.length - 1) * spacing + 190) / 2,
+      target.x + 95 - ((g.memberIds.length - 1) * spacing + 190) / 2,
     );
-    group.memberIds.forEach((memberId, index) => {
+    g.memberIds.forEach((memberId, index) => {
       const member = getNode(memberId);
       if (!member) return;
       member.x = Math.min(canvas.clientWidth - 205, startX + index * spacing);
       member.y = Math.min(canvas.clientHeight - 180, target.y + 170);
-      const premiseId = group.premises?.[memberId];
-      const premise = premiseId ? getNode(premiseId) : null;
-      if (premise) {
-        premise.x = Math.min(canvas.clientWidth - 205, member.x + 205);
-        premise.y = member.y;
+      const premiseId = g.premises?.[memberId];
+      const p = premiseId ? getNode(premiseId) : null;
+      if (p) {
+        p.x = Math.min(canvas.clientWidth - 205, member.x + 205);
+        p.y = member.y;
       }
     });
   }
+
   premiseDialog.hidden = true;
   premiseForm.reset();
+  saveHistoryState();
   render();
 }
 
@@ -437,8 +726,10 @@ function deleteNode(nodeId) {
     return group.target !== nodeId && group.memberIds.length > 0;
   });
   if (selectedNodeId === nodeId) selectedNodeId = null;
+  if (editingNodeId === nodeId) editingNodeId = null;
   selectedEdgeIndex = null;
   connectionPopover.hidden = true;
+  saveHistoryState();
   render();
 }
 
@@ -457,8 +748,8 @@ function nearestSide(element, clientX, clientY) {
 }
 
 function connectionPoint(node, element, side) {
-  const width = element.offsetWidth;
-  const height = element.offsetHeight;
+  const width = element.offsetWidth || 190;
+  const height = element.offsetHeight || 72;
   const centerX = node.x + width / 2;
   const centerY = node.y + height / 2;
   if (side === 'top') return { x: centerX, y: node.y };
@@ -654,6 +945,55 @@ function sideTowardsPoint(node, point) {
       : 'top';
 }
 
+// Auto-layout / Tidy Canvas
+function tidyLayout() {
+  if (nodes.length === 0) return;
+  const canvasW = canvas.clientWidth || 600;
+
+  const standpoints = nodes.filter((n) => n.type === 'standpoint');
+  const others = nodes.filter((n) => n.type !== 'standpoint');
+
+  // Place standpoints at the top
+  const spCount = standpoints.length || 1;
+  const spSpacing = 220;
+  const startSpX = Math.max(20, (canvasW - (spCount * spSpacing - 30)) / 2);
+  standpoints.forEach((sp, i) => {
+    sp.x = startSpX + i * spSpacing;
+    sp.y = 35;
+  });
+
+  // Organize arguments by levels
+  // Group coordinative members together, elementary pairs side-by-side
+  const expressedNodes = others.filter((n) => n.type === 'expressed' || n.type === 'coordinative');
+  const level1Y = 230;
+
+  let currentX = Math.max(20, (canvasW - (expressedNodes.length * 220 - 30)) / 2);
+  expressedNodes.forEach((node) => {
+    node.x = currentX;
+    node.y = level1Y;
+
+    // Check if it has an unexpressed premise paired with it
+    const group = groups.find(
+      (g) => g.kind === 'elementary' && g.memberIds.includes(node.id)
+    );
+    if (group) {
+      const premiseId = group.memberIds.find((id) => id !== node.id);
+      const premise = getNode(premiseId);
+      if (premise) {
+        premise.x = Math.min(canvasW - 205, node.x + 215);
+        premise.y = level1Y;
+        currentX += 215;
+      }
+    }
+    currentX += 220;
+  });
+
+  saveHistoryState();
+  render();
+  showToast('Map neatly arranged');
+}
+
+// Validation
 function addFeedbackIssue(issues, message) {
   if (!issues.includes(message)) issues.push(message);
 }
@@ -780,7 +1120,8 @@ function normalize(value) {
     .trim();
 }
 
-sourceText.addEventListener('mouseup', () => {
+// User text selection & Node creation
+sourceTextEl.addEventListener('mouseup', () => {
   const selection = window.getSelection();
   selectedText = selection?.toString().trim() || '';
   if (!selectedText) return;
@@ -801,6 +1142,12 @@ document.addEventListener('mousedown', (event) => {
     !event.target.closest('.node-port')
   )
     connectionPopover.hidden = true;
+  if (!event.target.closest('#export-btn') && !event.target.closest('#export-menu')) {
+    exportMenu.hidden = true;
+  }
+  if (!event.target.closest('.scheme-info-trigger') && !event.target.closest('#scheme-info-popover')) {
+    schemeInfoPopover.hidden = true;
+  }
 });
 
 document.querySelectorAll('[data-relationship]').forEach((button) => {
@@ -816,8 +1163,14 @@ document
   .getElementById('argument-action')
   .addEventListener('click', () => createNode('expressed'));
 
-function createNode(type) {
-  if (!selectedText) return;
+addStatementBtn.addEventListener('click', () => {
+  createNode('expressed', 'New argument statement');
+  startInlineEdit(nodes[nodes.length - 1].id);
+});
+
+function createNode(type, defaultText = null) {
+  const text = defaultText || selectedText;
+  if (!text) return;
   const count = nodes.filter((node) => node.type === type).length;
   const id = `${type}-${Date.now()}`;
   nodes.push({
@@ -827,16 +1180,17 @@ function createNode(type) {
         ? String(nodes.filter((node) => node.type === 'standpoint').length + 1)
         : `1.${count + 1}`,
     type,
-    text: selectedText,
+    text,
     scheme: '',
     x:
       type === 'standpoint'
         ? Math.max(20, (canvas.clientWidth - 190) / 2)
         : 30 + (count % 3) * 215,
-    y: type === 'standpoint' ? 30 : 350,
+    y: type === 'standpoint' ? 30 : 320,
   });
   selectedText = '';
   selectionMenu.hidden = true;
+  saveHistoryState();
   render();
 }
 
@@ -859,36 +1213,67 @@ premiseForm.addEventListener('submit', (event) => {
   submitPremise();
 });
 
+// Keyboard handling: Delete / Backspace, Undo / Redo
 document.addEventListener('keydown', (event) => {
-  if (
-    (event.key !== 'Delete' && event.key !== 'Backspace') ||
-    event.target.matches('textarea, input')
-  )
-    return;
-  if (selectedGroupId) {
-    groups = groups.filter((group) => group.id !== selectedGroupId);
-    selectedGroupId = null;
-    render();
+  if (event.target.matches('textarea, input')) return;
+
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+    if (event.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+    event.preventDefault();
     return;
   }
-  if (selectedEdgeIndex === null) return;
-  edges.splice(selectedEdgeIndex, 1);
-  selectedEdgeIndex = null;
-  render();
+
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'y') {
+    redo();
+    event.preventDefault();
+    return;
+  }
+
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (selectedGroupId) {
+      groups = groups.filter((group) => group.id !== selectedGroupId);
+      selectedGroupId = null;
+      saveHistoryState();
+      render();
+      return;
+    }
+    if (selectedEdgeIndex !== null) {
+      edges.splice(selectedEdgeIndex, 1);
+      selectedEdgeIndex = null;
+      saveHistoryState();
+      render();
+      return;
+    }
+    if (selectedNodeId) {
+      deleteNode(selectedNodeId);
+      return;
+    }
+  }
 });
 
+// Reset Button
 document.getElementById('reset-button').addEventListener('click', () => {
+  if (nodes.length > 0 && !confirm('Reset your argument map? All nodes will be cleared.')) {
+    return;
+  }
   nodes = [];
   edges = [];
   groups = [];
   selectedNodeId = null;
+  editingNodeId = null;
   selectedEdgeIndex = null;
   selectedGroupId = null;
   feedback.hidden = true;
   connectionPopover.hidden = true;
+  saveHistoryState();
   render();
 });
 
+// Check Analysis Button
 document.getElementById('check-button').addEventListener('click', () => {
   const issues = validateAnalysis();
   const standpoint = nodes.some((node) => node.type === 'standpoint');
@@ -933,5 +1318,272 @@ function showComparison() {
     );
 }
 
+// Undo / Redo Toolbar
+undoBtn.addEventListener('click', undo);
+redoBtn.addEventListener('click', redo);
+tidyBtn.addEventListener('click', tidyLayout);
+
+// Export Menu Handling
+exportBtn.addEventListener('click', (event) => {
+  event.stopPropagation();
+  const rect = exportBtn.getBoundingClientRect();
+  exportMenu.style.left = `${Math.min(window.innerWidth - 180, rect.left)}px`;
+  exportMenu.style.top = `${rect.bottom + 6}px`;
+  exportMenu.hidden = !exportMenu.hidden;
+});
+
+exportJsonBtn.addEventListener('click', () => {
+  exportMenu.hidden = true;
+  const data = {
+    title: 'Argument Map Overview',
+    exportedAt: new Date().toISOString(),
+    sourceText: sourceTextEl.textContent.trim(),
+    nodes,
+    edges,
+    groups,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `argument-map-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Exported map as JSON');
+});
+
+importJsonBtn.addEventListener('click', () => {
+  exportMenu.hidden = true;
+  importFileInput.click();
+});
+
+importFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const data = JSON.parse(event.target.result);
+      if (Array.isArray(data.nodes) && Array.isArray(data.edges)) {
+        nodes = data.nodes;
+        edges = data.edges;
+        groups = data.groups || [];
+        if (data.sourceText) {
+          sourceTextEl.textContent = data.sourceText;
+          presetSelect.value = 'custom';
+        }
+        selectedNodeId = null;
+        editingNodeId = null;
+        selectedEdgeIndex = null;
+        selectedGroupId = null;
+        saveHistoryState();
+        render();
+        showToast('Argument map imported successfully');
+      } else {
+        alert('Invalid argument map file format.');
+      }
+    } catch (err) {
+      alert('Could not parse JSON file.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+copySummaryBtn.addEventListener('click', () => {
+  exportMenu.hidden = true;
+  let text = `Argument Analysis Outline:\n`;
+  const standpoints = nodes.filter((n) => n.type === 'standpoint');
+  if (standpoints.length) {
+    text += `\nStandpoint(s):\n`;
+    standpoints.forEach((s) => {
+      text += `  [${s.number}] ${s.text}\n`;
+    });
+  }
+  const premises = nodes.filter((n) => n.type !== 'standpoint');
+  if (premises.length) {
+    text += `\nPremises & Arguments:\n`;
+    premises.forEach((p) => {
+      const schemeStr = p.scheme ? ` (${p.scheme})` : '';
+      text += `  [${p.number}] ${p.text}${schemeStr}\n`;
+    });
+  }
+  if (edges.length) {
+    text += `\nSupport Relationships:\n`;
+    edges.forEach((e) => {
+      const src = getNode(e.source);
+      const tgt = getNode(e.target);
+      if (src && tgt) {
+        text += `  ${src.number} → ${tgt.number} (${e.relationship})\n`;
+      }
+    });
+  }
+  navigator.clipboard.writeText(text).then(
+    () => showToast('Copied outline to clipboard'),
+    () => showToast('Failed to copy to clipboard'),
+  );
+});
+
+exportPngBtn.addEventListener('click', () => {
+  exportMenu.hidden = true;
+  renderToPng();
+});
+
+function renderToPng() {
+  if (nodes.length === 0) {
+    alert('Canvas is empty.');
+    return;
+  }
+  const width = canvas.clientWidth || 800;
+  const height = canvas.clientHeight || 520;
+  const offscreenCanvas = document.createElement('canvas');
+  offscreenCanvas.width = width * 2;
+  offscreenCanvas.height = height * 2;
+  const ctx = offscreenCanvas.getContext('2d');
+  ctx.scale(2, 2);
+
+  // Background
+  ctx.fillStyle = '#f5f8f6';
+  ctx.fillRect(0, 0, width, height);
+
+  // Background dots
+  ctx.fillStyle = '#d7e1dc';
+  for (let x = 8; x < width; x += 17) {
+    for (let y = 8; y < height; y += 17) {
+      ctx.beginPath();
+      ctx.arc(x, y, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Draw SVG lines onto canvas
+  // First clone SVG content to an image
+  const svgData = new XMLSerializer().serializeToString(connectionsSvg);
+  const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  const svgImg = new Image();
+
+  svgImg.onload = () => {
+    ctx.drawImage(svgImg, 0, 0, width, height);
+    URL.revokeObjectURL(svgUrl);
+
+    // Draw Nodes
+    nodes.forEach((node) => {
+      const nodeEl = nodesLayer.querySelector(`[data-node-id="${node.id}"]`);
+      const w = nodeEl?.offsetWidth || 190;
+      const h = nodeEl?.offsetHeight || 72;
+      const r = 8;
+
+      // Card fill & stroke
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(node.x, node.y, w, h, r);
+      if (node.type === 'standpoint') {
+        ctx.fillStyle = '#fffdf5';
+        ctx.strokeStyle = '#9d7c34';
+      } else if (node.type === 'unexpressed') {
+        ctx.fillStyle = '#fdf9fc';
+        ctx.strokeStyle = '#76566c';
+        ctx.setLineDash([4, 4]);
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#2f6257';
+      }
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // Number
+      ctx.font = 'bold 12px Georgia, serif';
+      ctx.fillStyle =
+        node.type === 'standpoint'
+          ? '#8c6d27'
+          : node.type === 'unexpressed'
+            ? '#76566c'
+            : '#2f6257';
+      ctx.fillText(node.number, node.x + 10, node.y + 22);
+
+      // Type label
+      ctx.font = '9px Inter, sans-serif';
+      ctx.fillStyle = '#6b7774';
+      const typeLabel =
+        node.type === 'standpoint'
+          ? 'STANDPOINT'
+          : node.type === 'unexpressed'
+            ? 'UNEXPRESSED PREMISE'
+            : 'EXPRESSED PREMISE';
+      ctx.fillText(typeLabel, node.x + 40, node.y + 20);
+
+      // Body text wrapped
+      ctx.font = '12px Georgia, serif';
+      ctx.fillStyle = '#1f2c2b';
+      wrapText(ctx, node.text, node.x + 12, node.y + 40, w - 24, 15);
+
+      // Scheme pill if exists
+      if (node.scheme) {
+        ctx.font = 'bold 9px Inter, sans-serif';
+        const schemeTxt = node.scheme.toUpperCase();
+        const sw = ctx.measureText(schemeTxt).width + 12;
+        ctx.fillStyle = '#f1f7f3';
+        ctx.beginPath();
+        ctx.roundRect(node.x + w - sw - 8, node.y + h - 18, sw, 14, 7);
+        ctx.fill();
+        ctx.fillStyle = '#2f6257';
+        ctx.fillText(schemeTxt, node.x + w - sw - 2, node.y + h - 7);
+      }
+    });
+
+    const link = document.createElement('a');
+    link.download = `argument-map-${Date.now()}.png`;
+    link.href = offscreenCanvas.toDataURL('image/png');
+    link.click();
+    showToast('Exported map as PNG image');
+  };
+  svgImg.src = svgUrl;
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '';
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' ';
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(line, x, y);
+      line = words[n] + ' ';
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, y);
+}
+
+// Scheme Critical Questions Info Popover
+function openSchemeInfo(schemeName, triggerEl) {
+  const details = SCHEME_DETAILS[schemeName];
+  if (!details) return;
+  schemeInfoTitle.textContent = details.title;
+  schemeInfoDesc.textContent = details.description;
+  schemeInfoList.innerHTML = details.questions
+    .map((q) => `<li>${escapeHtml(q)}</li>`)
+    .join('');
+
+  const rect = triggerEl.getBoundingClientRect();
+  schemeInfoPopover.style.left = `${Math.min(window.innerWidth - 330, Math.max(10, rect.left - 150))}px`;
+  schemeInfoPopover.style.top = `${rect.bottom + 8}px`;
+  schemeInfoPopover.hidden = false;
+}
+
+closeSchemeInfo.addEventListener('click', () => {
+  schemeInfoPopover.hidden = true;
+});
+
+// Initialization
+initDiscourse();
+saveHistoryState();
 window.addEventListener('resize', drawConnections);
 render();

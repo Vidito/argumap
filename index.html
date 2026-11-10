@@ -29,15 +29,32 @@
               <p class="section-kicker">01 / Discourse</p>
               <h2 id="source-heading">Read the short text</h2>
             </div>
-            <span class="selection-hint">Select a sentence to classify it</span>
+            <div class="source-actions">
+              <select id="preset-select" class="preset-select" aria-label="Select sample text">
+                <option value="preset-1">Preset: Library hours</option>
+                <option value="preset-2">Preset: Electric vehicles</option>
+                <option value="preset-3">Preset: Remote work</option>
+                <option value="custom">Custom text...</option>
+              </select>
+              <button class="button-icon" id="edit-text-btn" title="Edit discourse text" aria-label="Edit discourse text">
+                ✎
+              </button>
+            </div>
           </div>
-          <article class="source-card" id="source-text">
-            <p>
+          <article class="source-card" id="source-text-card">
+            <p id="source-text">
               The university should keep the library open until midnight during
               exam weeks. Many students need a quiet place to study after the
               evening classes end. Extending the hours would also make better
               use of the library’s existing staff and facilities.
             </p>
+            <div id="source-edit-wrap" hidden>
+              <textarea id="source-edit-input" class="source-edit-textarea" aria-label="Custom discourse text" placeholder="Paste or type any argumentative text here..."></textarea>
+              <div class="source-edit-actions">
+                <button type="button" class="button button-quiet" id="cancel-edit-btn">Cancel</button>
+                <button type="button" class="button button-primary" id="save-edit-btn">Done</button>
+              </div>
+            </div>
           </article>
 
           <div class="concept-note">
@@ -56,10 +73,13 @@
               <p class="section-kicker">02 / Reconstruction</p>
               <h2 id="canvas-heading">Build the structure</h2>
             </div>
-            <span class="canvas-legend"
-              ><span class="legend-line"></span> supports · select a box for
-              its scheme</span
-            >
+            <div class="canvas-controls-top">
+              <button class="button-toolbar" id="undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>↶</button>
+              <button class="button-toolbar" id="redo-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>↷</button>
+              <button class="button-toolbar" id="tidy-btn" title="Tidy / Auto-layout" aria-label="Tidy layout">Tidy</button>
+              <button class="button-toolbar" id="export-btn" title="Export argument map" aria-label="Export map">Export ▾</button>
+              <input type="file" id="import-file-input" accept=".json" hidden />
+            </div>
           </div>
           <div class="canvas-wrap">
             <div
@@ -84,8 +104,7 @@
               <div class="empty-state" id="empty-state">
                 <span class="empty-icon">+</span>
                 <p>
-                  Select the standpoint or an argument<br />from the discourse
-                  to begin.
+                  Select a sentence from the discourse,<br />or click <strong>+ Add Statement</strong> below.
                 </p>
               </div>
               <div id="nodes"></div>
@@ -104,12 +123,16 @@
             </div>
           </div>
           <div class="canvas-footer">
-            <button class="premise-button" id="premise-button">
-              + Add Unexpressed Premise
-            </button>
+            <div class="footer-left">
+              <button class="statement-button" id="add-statement-btn">
+                + Add Statement
+              </button>
+              <button class="premise-button" id="premise-button">
+                + Add Unexpressed Premise
+              </button>
+            </div>
             <span class="drag-help"
-              >Select an expressed premise before adding its unexpressed
-              premise.</span
+              >Double-click box to edit · Drag ports to link · Del to remove</span
             >
           </div>
         </section>
@@ -126,6 +149,25 @@
     <div class="selection-menu" id="selection-menu" hidden>
       <button id="standpoint-action">Set as Standpoint</button>
       <button id="argument-action">Add as Argument</button>
+    </div>
+
+    <div class="dropdown-menu" id="export-menu" hidden>
+      <button id="export-png-btn">Export as PNG image</button>
+      <button id="export-json-btn">Export as JSON</button>
+      <button id="import-json-btn">Import JSON...</button>
+      <button id="copy-summary-btn">Copy argument outline</button>
+    </div>
+
+    <div class="scheme-info-dialog" id="scheme-info-popover" hidden>
+      <div class="scheme-info-header">
+        <strong id="scheme-info-title">Argument Scheme</strong>
+        <button type="button" class="close-button" id="close-scheme-info">×</button>
+      </div>
+      <p id="scheme-info-desc" class="scheme-info-desc"></p>
+      <div class="scheme-info-questions">
+        <span class="scheme-info-subheading">Critical Questions:</span>
+        <ul id="scheme-info-list"></ul>
+      </div>
     </div>
 
     <div class="dialog-backdrop" id="premise-dialog" hidden>
