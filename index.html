@@ -76,6 +76,11 @@
             <div class="canvas-controls-top">
               <button class="button-toolbar" id="undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>↶</button>
               <button class="button-toolbar" id="redo-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>↷</button>
+              <div class="zoom-controls">
+                <button class="button-toolbar" id="zoom-out-btn" title="Zoom Out" aria-label="Zoom out">−</button>
+                <button class="button-toolbar zoom-display" id="zoom-reset-btn" title="Reset Zoom (100%)" aria-label="Reset zoom">100%</button>
+                <button class="button-toolbar" id="zoom-in-btn" title="Zoom In" aria-label="Zoom in">+</button>
+              </div>
               <button class="button-toolbar" id="tidy-btn" title="Tidy / Auto-layout" aria-label="Tidy layout">Tidy</button>
               <button class="button-toolbar" id="export-btn" title="Export argument map" aria-label="Export map">Export ▾</button>
               <input type="file" id="import-file-input" accept=".json" hidden />
@@ -87,38 +92,40 @@
               id="canvas"
               aria-label="Argument mapping canvas"
             >
-              <svg class="connections" id="connections" aria-hidden="true">
-                <defs>
-                  <marker
-                    id="arrowhead"
-                    markerWidth="8"
-                    markerHeight="8"
-                    refX="7"
-                    refY="4"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L8,4 L0,8 Z" fill="currentColor"></path>
-                  </marker>
-                </defs>
-              </svg>
+              <div class="canvas-content" id="canvas-content">
+                <svg class="connections" id="connections" aria-hidden="true">
+                  <defs>
+                    <marker
+                      id="arrowhead"
+                      markerWidth="8"
+                      markerHeight="8"
+                      refX="7"
+                      refY="4"
+                      orient="auto"
+                    >
+                      <path d="M0,0 L8,4 L0,8 Z" fill="currentColor"></path>
+                    </marker>
+                  </defs>
+                </svg>
+                <div id="nodes"></div>
+                <div class="connection-popover" id="connection-popover" hidden>
+                  <p>What kind of support is this?</p>
+                  <button data-relationship="multiple">
+                    Multiple: independent support
+                  </button>
+                  <button data-relationship="coordinative">
+                    Coordinative: interdependent support
+                  </button>
+                  <button data-relationship="sub">
+                    Subordinative: support for an argument
+                  </button>
+                </div>
+              </div>
               <div class="empty-state" id="empty-state">
                 <span class="empty-icon">+</span>
                 <p>
                   Select a sentence from the discourse,<br />or click <strong>+ Add Statement</strong> below.
                 </p>
-              </div>
-              <div id="nodes"></div>
-              <div class="connection-popover" id="connection-popover" hidden>
-                <p>What kind of support is this?</p>
-                <button data-relationship="multiple">
-                  Multiple: independent support
-                </button>
-                <button data-relationship="coordinative">
-                  Coordinative: interdependent support
-                </button>
-                <button data-relationship="sub">
-                  Subordinative: support for an argument
-                </button>
               </div>
             </div>
           </div>
@@ -132,7 +139,7 @@
               </button>
             </div>
             <span class="drag-help"
-              >Double-click box to edit · Drag ports to link · Del to remove</span
+              >Drag background to pan · Scroll to zoom · Double-click box to edit · Del to remove</span
             >
           </div>
         </section>

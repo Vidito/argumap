@@ -55,6 +55,7 @@ const presetSelect = document.getElementById('preset-select');
 
 const selectionMenu = document.getElementById('selection-menu');
 const canvas = document.getElementById('canvas');
+const canvasContent = document.getElementById('canvas-content');
 const nodesLayer = document.getElementById('nodes');
 const connectionsSvg = document.getElementById('connections');
 const emptyState = document.getElementById('empty-state');
@@ -67,6 +68,9 @@ const addStatementBtn = document.getElementById('add-statement-btn');
 
 const undoBtn = document.getElementById('undo-btn');
 const redoBtn = document.getElementById('redo-btn');
+const zoomInBtn = document.getElementById('zoom-in-btn');
+const zoomOutBtn = document.getElementById('zoom-out-btn');
+const zoomResetBtn = document.getElementById('zoom-reset-btn');
 const tidyBtn = document.getElementById('tidy-btn');
 const exportBtn = document.getElementById('export-btn');
 const exportMenu = document.getElementById('export-menu');
@@ -96,6 +100,47 @@ let pendingTargetSide = null;
 let selectedEdgeIndex = null;
 let selectedGroupId = null;
 let dragState = null;
+
+// Canvas Pan & Zoom State
+let zoomScale = 1;
+let panX = 0;
+let panY = 0;
+let isCanvasPanning = false;
+let panStart = null;
+
+function updateCanvasTransform() {
+  canvasContent.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+  // Update background pattern position on canvas to smoothly move with pan
+  canvas.style.backgroundPosition = `${panX}px ${panY}px`;
+  canvas.style.backgroundSize = `${17 * zoomScale}px ${17 * zoomScale}px`;
+  zoomResetBtn.textContent = `${Math.round(zoomScale * 100)}%`;
+}
+
+function zoomAroundPoint(newScale, clientX, clientY) {
+  const minScale = 0.3;
+  const maxScale = 2.5;
+  const clampedScale = Math.max(minScale, Math.min(maxScale, newScale));
+  if (Math.abs(clampedScale - zoomScale) < 0.001) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = clientX - rect.left;
+  const mouseY = clientY - rect.top;
+
+  // Zoom centered on mouse point
+  panX = mouseX - (mouseX - panX) * (clampedScale / zoomScale);
+  panY = mouseY - (mouseY - panY) * (clampedScale / zoomScale);
+  zoomScale = clampedScale;
+
+  updateCanvasTransform();
+}
+
+function clientToCanvasCoords(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left - panX) / zoomScale,
+    y: (clientY - rect.top - panY) / zoomScale,
+  };
+}
 
 // History Stack for Undo/Redo
 let historyStack = [];
@@ -209,12 +254,23 @@ function render() {
   nodesLayer.innerHTML = '';
   nodes.forEach((node) => {
     const element = document.createElement('article');
-    const label =
-      node.type === 'standpoint'
-        ? 'standpoint'
-        : node.type === 'unexpressed'
-          ? 'unexpressed premise'
-          : 'expressed premise';
+    let labelHtml = '';
+    if (node.type === 'standpoint') {
+      const typeOptions = `
+        <select class="standpoint-type-select" aria-label="Standpoint type for ${escapeHtml(node.number)}">
+          <option value="" ${!node.standpointType ? 'selected' : ''}>[Select type...]</option>
+          <option value="Evaluative" ${node.standpointType === 'Evaluative' ? 'selected' : ''}>[Evaluative]</option>
+          <option value="Descriptive" ${node.standpointType === 'Descriptive' ? 'selected' : ''}>[Descriptive]</option>
+          <option value="Prescriptive" ${node.standpointType === 'Prescriptive' ? 'selected' : ''}>[Prescriptive]</option>
+        </select>
+      `;
+      labelHtml = `<span class="node-type">${typeOptions} <span class="standpoint-label">STANDPOINT</span></span>`;
+    } else if (node.type === 'unexpressed') {
+      labelHtml = `<span class="node-type">UNEXPRESSED PREMISE</span>`;
+    } else {
+      labelHtml = `<span class="node-type">EXPRESSED PREMISE</span>`;
+    }
+
     element.className = `node ${node.type === 'standpoint' ? 'standpoint' : ''} ${node.type === 'unexpressed' ? 'unexpressed' : ''} ${selectedNodeId === node.id ? 'selected' : ''}`;
     element.dataset.nodeId = node.id;
     element.style.left = `${node.x}px`;
@@ -246,7 +302,7 @@ function render() {
       <button class="delete-node" type="button" aria-label="Delete ${escapeHtml(node.number)}">×</button>
       <span class="node-number">${escapeHtml(node.number)}</span>
       <div class="node-body">
-        <span class="node-type">${label}</span>
+        ${labelHtml}
         ${bodyContent}
       </div>
       <div class="scheme-control">${schemeControl}</div>
@@ -303,6 +359,21 @@ function render() {
       event.stopPropagation();
       deleteNode(node.id);
     });
+
+    const standpointTypeSelect = element.querySelector('.standpoint-type-select');
+    if (standpointTypeSelect) {
+      standpointTypeSelect.addEventListener('pointerdown', (event) => {
+        event.stopPropagation();
+      });
+      standpointTypeSelect.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
+      standpointTypeSelect.addEventListener('change', (event) => {
+        node.standpointType = event.target.value;
+        saveHistoryState();
+        render();
+      });
+    }
 
     element.querySelector('.scheme-select')?.addEventListener('pointerdown', (event) => {
       event.stopPropagation();
@@ -384,18 +455,19 @@ function startNodeDrag(event) {
     event.target.classList.contains('delete-node') ||
     event.target.classList.contains('scheme-select') ||
     event.target.classList.contains('scheme-info-trigger') ||
+    event.target.classList.contains('standpoint-type-select') ||
     event.target.classList.contains('node-edit-textarea')
   )
     return;
   const node = getNode(event.currentTarget.dataset.nodeId);
   if (!node) return;
-  const bounds = canvas.getBoundingClientRect();
+  const coords = clientToCanvasCoords(event.clientX, event.clientY);
   dragState = {
     node,
     startX: node.x,
     startY: node.y,
-    offsetX: event.clientX - bounds.left - node.x,
-    offsetY: event.clientY - bounds.top - node.y,
+    offsetX: coords.x - node.x,
+    offsetY: coords.y - node.y,
     moved: false,
   };
   selectedNodeId = node.id;
@@ -409,21 +481,9 @@ function startNodeDrag(event) {
 function moveNode(event) {
   if (!dragState) return;
   dragState.moved = true;
-  const bounds = canvas.getBoundingClientRect();
-  dragState.node.x = Math.max(
-    8,
-    Math.min(
-      canvas.clientWidth - 205,
-      event.clientX - bounds.left - dragState.offsetX,
-    ),
-  );
-  dragState.node.y = Math.max(
-    8,
-    Math.min(
-      canvas.clientHeight - 85,
-      event.clientY - bounds.top - dragState.offsetY,
-    ),
-  );
+  const coords = clientToCanvasCoords(event.clientX, event.clientY);
+  dragState.node.x = Math.round(coords.x - dragState.offsetX);
+  dragState.node.y = Math.round(coords.y - dragState.offsetY);
   const element = nodesLayer.querySelector(
     `[data-node-id="${dragState.node.id}"]`,
   );
@@ -457,7 +517,6 @@ function startConnection(event) {
   pendingSourceSide = event.currentTarget.dataset.side;
   pendingTargetId = null;
   pendingTargetSide = null;
-  const bounds = canvas.getBoundingClientRect();
 
   const move = (moveEvent) => {
     const hovered = document
@@ -493,10 +552,8 @@ function startConnection(event) {
         upEvent.clientX,
         upEvent.clientY,
       );
-      showConnectionPopover(
-        upEvent.clientX - bounds.left,
-        upEvent.clientY - bounds.top,
-      );
+      const coords = clientToCanvasCoords(upEvent.clientX, upEvent.clientY);
+      showConnectionPopover(coords.x, coords.y);
     } else {
       clearPendingConnection();
     }
@@ -514,8 +571,8 @@ function clearPendingConnection() {
 }
 
 function showConnectionPopover(x, y) {
-  connectionPopover.style.left = `${Math.min(canvas.clientWidth - 200, Math.max(10, x))}px`;
-  connectionPopover.style.top = `${Math.min(canvas.clientHeight - 130, Math.max(10, y))}px`;
+  connectionPopover.style.left = `${x}px`;
+  connectionPopover.style.top = `${y}px`;
   connectionPopover.hidden = false;
 }
 
@@ -587,6 +644,60 @@ function addToCoordinativeGroup(source, target) {
       member.y = Math.max(20, target.y + 130);
     }
   });
+}
+
+// Auto-layout / Tidy Canvas
+function tidyLayout() {
+  if (nodes.length === 0) return;
+  const canvasW = canvas.clientWidth || 600;
+
+  const standpoints = nodes.filter((n) => n.type === 'standpoint');
+  const others = nodes.filter((n) => n.type !== 'standpoint');
+
+  // Place standpoints at the top
+  const spCount = standpoints.length || 1;
+  const spSpacing = 270;
+  const startSpX = Math.max(20, (canvasW - (spCount * spSpacing - 20)) / 2);
+  standpoints.forEach((sp, i) => {
+    sp.x = startSpX + i * spSpacing;
+    sp.y = 35;
+  });
+
+  // Organize arguments by levels
+  // Group coordinative members together, elementary pairs side-by-side
+  const expressedNodes = others.filter((n) => n.type === 'expressed' || n.type === 'coordinative');
+  const level1Y = 230;
+
+  let currentX = Math.max(20, (canvasW - (expressedNodes.length * 220 - 30)) / 2);
+  expressedNodes.forEach((node) => {
+    node.x = currentX;
+    node.y = level1Y;
+
+    // Check if it has an unexpressed premise paired with it
+    const group = groups.find(
+      (g) => g.kind === 'elementary' && g.memberIds.includes(node.id)
+    );
+    if (group) {
+      const premiseId = group.memberIds.find((id) => id !== node.id);
+      const premise = getNode(premiseId);
+      if (premise) {
+        premise.x = Math.min(canvasW - 205, node.x + 215);
+        premise.y = level1Y;
+        currentX += 215;
+      }
+    }
+    currentX += 220;
+  });
+
+  // Reset pan and zoom to center the view cleanly
+  zoomScale = 1;
+  panX = 0;
+  panY = 0;
+  updateCanvasTransform();
+
+  saveHistoryState();
+  render();
+  showToast('Map neatly arranged');
 }
 
 function addUnexpressedPremise() {
@@ -945,52 +1056,85 @@ function sideTowardsPoint(node, point) {
       : 'top';
 }
 
-// Auto-layout / Tidy Canvas
-function tidyLayout() {
-  if (nodes.length === 0) return;
-  const canvasW = canvas.clientWidth || 600;
-
-  const standpoints = nodes.filter((n) => n.type === 'standpoint');
-  const others = nodes.filter((n) => n.type !== 'standpoint');
-
-  // Place standpoints at the top
-  const spCount = standpoints.length || 1;
-  const spSpacing = 220;
-  const startSpX = Math.max(20, (canvasW - (spCount * spSpacing - 30)) / 2);
-  standpoints.forEach((sp, i) => {
-    sp.x = startSpX + i * spSpacing;
-    sp.y = 35;
+// Canvas Panning and Zooming Events
+function initCanvasPanAndZoom() {
+  // Zoom Controls
+  zoomInBtn.addEventListener('click', () => {
+    const rect = canvas.getBoundingClientRect();
+    zoomAroundPoint(zoomScale + 0.15, rect.left + rect.width / 2, rect.top + rect.height / 2);
   });
 
-  // Organize arguments by levels
-  // Group coordinative members together, elementary pairs side-by-side
-  const expressedNodes = others.filter((n) => n.type === 'expressed' || n.type === 'coordinative');
-  const level1Y = 230;
+  zoomOutBtn.addEventListener('click', () => {
+    const rect = canvas.getBoundingClientRect();
+    zoomAroundPoint(zoomScale - 0.15, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  });
 
-  let currentX = Math.max(20, (canvasW - (expressedNodes.length * 220 - 30)) / 2);
-  expressedNodes.forEach((node) => {
-    node.x = currentX;
-    node.y = level1Y;
+  zoomResetBtn.addEventListener('click', () => {
+    zoomScale = 1;
+    panX = 0;
+    panY = 0;
+    updateCanvasTransform();
+  });
 
-    // Check if it has an unexpressed premise paired with it
-    const group = groups.find(
-      (g) => g.kind === 'elementary' && g.memberIds.includes(node.id)
-    );
-    if (group) {
-      const premiseId = group.memberIds.find((id) => id !== node.id);
-      const premise = getNode(premiseId);
-      if (premise) {
-        premise.x = Math.min(canvasW - 205, node.x + 215);
-        premise.y = level1Y;
-        currentX += 215;
-      }
+  // Mouse Wheel Zooming
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) {
+      // Trackpad pinch-zoom or Ctrl+wheel
+      const zoomFactor = -event.deltaY * 0.01;
+      zoomAroundPoint(zoomScale + zoomFactor, event.clientX, event.clientY);
+    } else if (event.shiftKey) {
+      // Horizontal pan
+      panX -= event.deltaY || event.deltaX;
+      updateCanvasTransform();
+    } else {
+      // Standard mouse wheel: zoom centered around mouse pointer
+      const zoomDelta = event.deltaY < 0 ? 0.12 : -0.12;
+      zoomAroundPoint(zoomScale + zoomDelta, event.clientX, event.clientY);
     }
-    currentX += 220;
-  });
+  }, { passive: false });
 
-  saveHistoryState();
-  render();
-  showToast('Map neatly arranged');
+  // Background Drag Panning
+  canvas.addEventListener('pointerdown', (event) => {
+    // Only trigger pan if directly clicking on canvas or canvasContent or emptyState, not on a node or button
+    if (
+      event.target === canvas ||
+      event.target === canvasContent ||
+      event.target === emptyState ||
+      event.target.closest('#empty-state') ||
+      event.target === connectionsSvg
+    ) {
+      isCanvasPanning = true;
+      panStart = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        panX,
+        panY,
+      };
+      canvas.classList.add('is-panning');
+      canvas.setPointerCapture(event.pointerId);
+
+      const onPointerMove = (moveEvent) => {
+        if (!isCanvasPanning || !panStart) return;
+        const dx = moveEvent.clientX - panStart.clientX;
+        const dy = moveEvent.clientY - panStart.clientY;
+        panX = panStart.panX + dx;
+        panY = panStart.panY + dy;
+        updateCanvasTransform();
+      };
+
+      const onPointerUp = (upEvent) => {
+        isCanvasPanning = false;
+        panStart = null;
+        canvas.classList.remove('is-panning');
+        canvas.removeEventListener('pointermove', onPointerMove);
+        canvas.removeEventListener('pointerup', onPointerUp);
+      };
+
+      canvas.addEventListener('pointermove', onPointerMove);
+      canvas.addEventListener('pointerup', onPointerUp);
+    }
+  });
 }
 
 // Validation
@@ -1180,11 +1324,12 @@ function createNode(type, defaultText = null) {
         ? String(nodes.filter((node) => node.type === 'standpoint').length + 1)
         : `1.${count + 1}`,
     type,
+    standpointType: '',
     text,
     scheme: '',
     x:
       type === 'standpoint'
-        ? Math.max(20, (canvas.clientWidth - 190) / 2)
+        ? Math.max(20, (canvas.clientWidth - 250) / 2)
         : 30 + (count % 3) * 215,
     y: type === 'standpoint' ? 30 : 320,
   });
@@ -1399,7 +1544,8 @@ copySummaryBtn.addEventListener('click', () => {
   if (standpoints.length) {
     text += `\nStandpoint(s):\n`;
     standpoints.forEach((s) => {
-      text += `  [${s.number}] ${s.text}\n`;
+      const typeStr = s.standpointType ? ` (${s.standpointType} Standpoint)` : '';
+      text += `  [${s.number}]${typeStr} ${s.text}\n`;
     });
   }
   const premises = nodes.filter((n) => n.type !== 'standpoint');
@@ -1472,7 +1618,7 @@ function renderToPng() {
     // Draw Nodes
     nodes.forEach((node) => {
       const nodeEl = nodesLayer.querySelector(`[data-node-id="${node.id}"]`);
-      const w = nodeEl?.offsetWidth || 190;
+      const w = node.type === 'standpoint' ? 250 : (nodeEl?.offsetWidth || 190);
       const h = nodeEl?.offsetHeight || 72;
       const r = 8;
 
@@ -1509,12 +1655,14 @@ function renderToPng() {
       // Type label
       ctx.font = '9px Inter, sans-serif';
       ctx.fillStyle = '#6b7774';
-      const typeLabel =
-        node.type === 'standpoint'
-          ? 'STANDPOINT'
-          : node.type === 'unexpressed'
-            ? 'UNEXPRESSED PREMISE'
-            : 'EXPRESSED PREMISE';
+      let typeLabel = '';
+      if (node.type === 'standpoint') {
+        typeLabel = node.standpointType ? `[${node.standpointType.toUpperCase()}] STANDPOINT` : 'STANDPOINT';
+      } else if (node.type === 'unexpressed') {
+        typeLabel = 'UNEXPRESSED PREMISE';
+      } else {
+        typeLabel = 'EXPRESSED PREMISE';
+      }
       ctx.fillText(typeLabel, node.x + 40, node.y + 20);
 
       // Body text wrapped
@@ -1584,6 +1732,8 @@ closeSchemeInfo.addEventListener('click', () => {
 
 // Initialization
 initDiscourse();
+initCanvasPanAndZoom();
+updateCanvasTransform();
 saveHistoryState();
 window.addEventListener('resize', drawConnections);
 render();
