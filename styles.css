@@ -196,6 +196,26 @@ h2 {
   align-items: center;
   gap: 6px;
 }
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.zoom-controls .button-toolbar {
+  border: none;
+  border-radius: 0;
+  padding: 4px 8px;
+}
+.zoom-controls .button-toolbar:not(:last-child) {
+  border-right: 1px solid var(--line);
+}
+.zoom-display {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 .button-toolbar {
   background: transparent;
   border: 1px solid var(--line);
@@ -267,14 +287,33 @@ h2 {
   overflow: hidden;
   border: 1px solid #d1ded8;
   border-radius: 7px;
+  background-color: var(--canvas);
   background-image: radial-gradient(#d7e1dc 1px, transparent 1px);
   background-size: 17px 17px;
+  cursor: grab;
+}
+.canvas.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+.canvas-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.canvas-content > * {
+  pointer-events: auto;
 }
 .connections {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  top: 0;
+  left: 0;
+  width: 10000px;
+  height: 10000px;
   overflow: visible;
   pointer-events: none;
   color: var(--sage-deep);
@@ -339,16 +378,17 @@ h2 {
   cursor: grab;
   z-index: 2;
 }
+.node.standpoint {
+  width: 250px;
+  border-color: #9d7c34;
+  background: #fffdf5;
+}
 .node.selected {
   outline: 2px solid #8ebba8;
   outline-offset: 3px;
 }
 .node:active {
   cursor: grabbing;
-}
-.node.standpoint {
-  border-color: #9d7c34;
-  background: #fffdf5;
 }
 .node.unexpressed {
   border-style: dashed;
@@ -372,12 +412,39 @@ h2 {
   min-width: 0;
 }
 .node-type {
-  display: block;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
   color: var(--muted);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
+  padding-right: 16px;
+  line-height: 1.2;
+}
+.standpoint-type-select {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 4px;
+  border: 1px solid #dfcf9e;
+  border-radius: 4px;
+  background: #fff8df;
+  color: #8c6d27;
+  cursor: pointer;
+  outline: none;
+}
+.standpoint-type-select:focus {
+  border-color: #9d7c34;
+  box-shadow: 0 0 0 2px #faecc7;
+}
+.standpoint-label {
+  font-weight: 700;
+  color: #8c6d27;
+  letter-spacing: 0.08em;
 }
 .node-text {
   margin: 0;
